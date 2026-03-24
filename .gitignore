@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+.env
+chroma_data/
+test_result.json
+test_script.py
+test_overpass.py
+test_overpass2.py
+test_db.py
+.ipynb_checkpoints/
+.vscode/
