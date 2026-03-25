@@ -1,11 +1,5 @@
 """
-Intelligence Map RAG API — FastAPI main application.
-
-Endpoints:
-  POST /intel/ingest   — Fetch & store weather, air quality, earthuqakes, business
-  POST /intel/analyze  — Query RAG + LLM analysis
-  GET  /intel/data     — View stored documents
-  GET  /health         — System health check
+情報地圖平台 — FastAPI 主應用程式
 """
 
 from fastapi import FastAPI, HTTPException
@@ -22,12 +16,13 @@ from models import (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 初始化檢查
     status = llm_service.check_ollama_status()
     if status["status"] == "ok":
-        print(f"[OK] Ollama connected. Model: {status['target_model']}, Available: {status['model_available']}")
+        print(f"[OK] Ollama 已連線。模型: {status['target_model']}, 可用狀態: {status['model_available']}")
     else:
-        print(f"[WARN] Ollama not reachable: {status.get('error')}. LLM analysis will fail.")
-    print(f"[INFO] ChromaDB documents: {rag_store.get_all_documents(limit=1)['total']}")
+        print(f"[WARN] 無法連線至 Ollama: {status.get('error')}。LLM 分析功能將受限。")
+    print(f"[INFO] ChromaDB 目前文檔數: {rag_store.get_all_documents(limit=1)['total']}")
     yield
 
 
@@ -41,6 +36,7 @@ app = FastAPI(
 
 @app.get("/health")
 async def health_check():
+    """系統健康檢查"""
     ollama_status = llm_service.check_ollama_status()
     doc_count = rag_store.get_all_documents(limit=1)["total"]
     return {
@@ -53,16 +49,14 @@ async def health_check():
 @app.post("/intel/ingest", response_model=IngestResponse)
 async def ingest_data(req: IngestRequest):
     """
-    Fetch latest weather, AQI, earthquakes based on flags, + generate business data,
-    then store everything in ChromaDB for RAG.
+    抓取最新的天氣、空氣品質、地震及鄰近 POI 資料，並存入 ChromaDB。
     """
     documents = []
 
-    # 1. Fetch Weather and/or AQI
+    # 1. 抓取天氣與空氣品質
     weather, aqi = None, None
     try:
         if req.fetch_weather or req.fetch_air_quality:
-            # Reusing the parallel fetcher if we want both
             if req.fetch_weather and req.fetch_air_quality:
                 weather, aqi = await data_fetcher.fetch_weather_and_aqi(req.city, req.lat, req.lon)
             else:
@@ -76,9 +70,9 @@ async def ingest_data(req: IngestRequest):
             if aqi:
                 documents.append({"type": "air_quality", "data": aqi})
     except Exception as e:
-        print(f"Error fetching Weather/AQI: {e}")
+        print(f"抓取天氣/空氣品質時發生錯誤: {e}")
 
-    # 2. Fetch Earthquakes
+    # 2. 抓取地震資料
     earthquakes = []
     try:
         if req.fetch_earthquakes:
@@ -86,9 +80,9 @@ async def ingest_data(req: IngestRequest):
             for eq in earthquakes:
                 documents.append({"type": "earthquake", "data": eq})
     except Exception as e:
-             print(f"Error fetching Earthquakes: {e}")
+             print(f"抓取地震資料時發生錯誤: {e}")
 
-    # 3. Fetch nearby real POIs
+    # 3. 抓取真實鄰近地點 (POI)
     pois = []
     try:
         if req.fetch_pois:
@@ -96,9 +90,9 @@ async def ingest_data(req: IngestRequest):
             for poi in pois:
                 documents.append({"type": "poi", "data": poi})
     except Exception as e:
-        print(f"Error fetching POIs: {e}")
+        print(f"抓取 POI 資料時發生錯誤: {e}")
 
-    # 4. Store in ChromaDB
+    # 4. 存入 ChromaDB
     count = rag_store.add_documents(documents)
 
     msg = f"已匯入: "
@@ -117,29 +111,32 @@ async def ingest_data(req: IngestRequest):
 
 @app.post("/intel/analyze")
 async def analyze_intel(req: AnalyzeRequest):
+    """根據問題進行 RAG + LLM 分析"""
     context_docs = rag_store.query(req.question, n_results=req.top_k)
 
     if not context_docs:
         raise HTTPException(
             status_code=404,
-            detail="ChromaDB is empty. Please call /intel/ingest first to load data.",
+            detail="ChromaDB 目前是空的。請先呼叫 /intel/ingest 匯入資料。",
         )
 
     try:
         result = await llm_service.analyze(context_docs, req.question)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Ollama LLM error: {e}")
+        raise HTTPException(status_code=502, detail=f"Ollama LLM 錯誤: {e}")
 
     return result
 
 
 @app.get("/intel/data")
 async def list_data(limit: int = 50):
+    """查看目前儲存的所有文檔"""
     return rag_store.get_all_documents(limit=limit)
 
 
 @app.post("/intel/seed")
 async def seed_data(days: int = 7, city: str = "Taipei"):
+    """灌入歷史模擬資料清單"""
     docs = data_fetcher.generate_historical_data(city, days=days)
     count = rag_store.add_documents(docs)
     return {
@@ -151,5 +148,6 @@ async def seed_data(days: int = 7, city: str = "Taipei"):
 
 @app.post("/intel/reset")
 async def reset_data():
+    """重置 ChromaDB 集合"""
     rag_store.reset_collection()
-    return {"status": "ok", "message": "ChromaDB collection has been reset."}
+    return {"status": "ok", "message": "ChromaDB 集合已重置。"}

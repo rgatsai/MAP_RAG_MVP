@@ -1,5 +1,5 @@
 """
-LLM service: sends RAG context + user question to Ollama for analysis.
+LLM 服務：負責將 RAG 檢索到的文檔與使用者問題發送給 Ollama 進行分析。
 """
 
 import json
@@ -10,10 +10,9 @@ import config
 
 async def analyze(context_docs: list[dict], question: str) -> dict:
     """
-    Send retrieved context + question to Ollama for intelligence analysis.
-    Returns parsed analysis dict, or raw text if JSON parsing fails.
+    將檢索到的資料與問題發送至 Ollama 進行情報分析。
     """
-    # Build context string from RAG results
+    # 建立上下文內容
     context_parts = []
     for i, doc in enumerate(context_docs, 1):
         context_parts.append(f"[資料 {i}] {doc['text']}")
@@ -38,7 +37,7 @@ async def analyze(context_docs: list[dict], question: str) -> dict:
 
 只回覆 JSON，不要加任何其他文字或 markdown 標記。"""
 
-    # Call Ollama
+    # 呼叫 Ollama API
     response = ollama_lib.chat(
         model=config.OLLAMA_MODEL,
         messages=[
@@ -49,7 +48,7 @@ async def analyze(context_docs: list[dict], question: str) -> dict:
 
     raw_text = response["message"]["content"]
 
-    # Try to parse JSON from LLM response
+    # 嘗試解析 LLM 回傳的 JSON
     parsed = _extract_json(raw_text)
 
     if parsed:
@@ -63,7 +62,7 @@ async def analyze(context_docs: list[dict], question: str) -> dict:
             "question": question,
         }
     else:
-        # Fallback: return raw text as summary
+        # 解析失敗時，將原始文字作為摘要回傳
         return {
             "title": "情報分析",
             "summary": raw_text[:500],
@@ -76,7 +75,7 @@ async def analyze(context_docs: list[dict], question: str) -> dict:
 
 
 def check_ollama_status() -> dict:
-    """Check if Ollama is running and model is available."""
+    """檢查 Ollama 服務狀態與模型可用性"""
     try:
         models = ollama_lib.list()
         model_names = [m.model for m in models.models]
@@ -97,15 +96,16 @@ def check_ollama_status() -> dict:
 
 
 def _extract_json(text: str) -> dict | None:
-    """Try to extract JSON from LLM response text."""
-    # Try direct parse
+    """從 LLM 的回覆文本中提取 JSON 內容"""
+    # 1. 嘗試直接解析
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
 
-    # Try to find JSON block within markdown code fences
     import re
+    
+    # 2. 嘗試尋找 markdown 代碼塊
     json_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
     if json_match:
         try:
@@ -113,7 +113,7 @@ def _extract_json(text: str) -> dict | None:
         except json.JSONDecodeError:
             pass
 
-    # Try to find anything that looks like a JSON object
+    # 3. 嘗試尋找第一個和大括號之間的內容
     brace_match = re.search(r"\{.*\}", text, re.DOTALL)
     if brace_match:
         try:

@@ -1,15 +1,15 @@
 """
-Pydantic data models for request/response schemas.
+數據模型定義：使用 Pydantic 定義請求與回應的 Schema。
 """
 
 from pydantic import BaseModel
 from typing import Optional
 
 
-# --- Request Models ---
+# --- 請求模型 (Requests) ---
 
 class IngestRequest(BaseModel):
-    """Request to ingest data for a specific location."""
+    """匯入資料的請求模型"""
     city: str = "Taipei"
     lat: Optional[float] = 25.033
     lon: Optional[float] = 121.565
@@ -20,15 +20,15 @@ class IngestRequest(BaseModel):
 
 
 class AnalyzeRequest(BaseModel):
-    """Request to analyze intelligence."""
+    """分析情報的請求模型"""
     question: str
     top_k: int = 5
 
 
-# --- Data Models ---
+# --- 數據模型 (Data) ---
 
 class WeatherData(BaseModel):
-    """Weather data from API."""
+    """天氣數據"""
     city: str
     temperature: float
     humidity: float
@@ -39,7 +39,7 @@ class WeatherData(BaseModel):
     date: str
 
 class AirQualityData(BaseModel):
-    """Air Quality data from Open-Meteo."""
+    """空氣品質數據"""
     city: str
     aqi_us: int
     pm2_5: float
@@ -47,7 +47,7 @@ class AirQualityData(BaseModel):
     date: str
 
 class EarthquakeData(BaseModel):
-    """Earthquake data from USGS."""
+    """地震數據"""
     place: str
     magnitude: float
     depth_km: float
@@ -55,7 +55,7 @@ class EarthquakeData(BaseModel):
 
 
 class POIData(BaseModel):
-    """Real point of interest from OpenStreetMap."""
+    """興趣點數據 (POI)"""
     name: str
     category: str
     lat: float
@@ -65,16 +65,16 @@ class POIData(BaseModel):
     date: str
 
 
-# --- Response Models ---
+# --- 回應模型 (Responses) ---
 
 class IntelInsight(BaseModel):
-    """A single insight from analysis."""
+    """分析產出的單一洞察"""
     finding: str
     evidence: str
 
 
 class AnalysisResponse(BaseModel):
-    """Response from the analysis endpoint."""
+    """分析介面的回應模型"""
     title: str
     summary: str
     insights: list[IntelInsight]
@@ -85,7 +85,7 @@ class AnalysisResponse(BaseModel):
 
 
 class IngestResponse(BaseModel):
-    """Response from the ingest endpoint."""
+    """匯入介面的回應模型"""
     status: str
     documents_added: int
     city: str

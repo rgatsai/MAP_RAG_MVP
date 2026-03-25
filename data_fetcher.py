@@ -1,7 +1,8 @@
 """
-Data fetcher: retrieves various Open Data and generates mock events.
-- Weather & Air Quality: Open-Meteo (Global, Free)
-- Earthquakes: USGS (Global, Free)
+數據獲取模組：負責從各種開放資料源抓取數據，或生成模擬數據。
+- 天氣與空氣品質：Open-Meteo
+- 地震資訊：USGS
+- 地點資訊：OpenStreetMap (Overpass API)
 """
 
 import httpx
@@ -13,12 +14,8 @@ import math
 import config
 
 
-# ---------------------------------------------------------------------------
-# Global Open Data sources
-# ---------------------------------------------------------------------------
-
 async def fetch_weather_and_aqi(city: str, lat: float = 25.033, lon: float = 121.565) -> tuple[dict|None, dict|None]:
-    """Fetch both weather and air quality from Open-Meteo in parallel."""
+    """同時並行執行天氣與空氣品質的抓取任務"""
     weather_task = fetch_weather(city, lat, lon)
     aqi_task = fetch_air_quality(city, lat, lon)
     
@@ -30,6 +27,7 @@ async def fetch_weather_and_aqi(city: str, lat: float = 25.033, lon: float = 121
     return weather, aqi
 
 async def fetch_weather(city: str, lat: float, lon: float) -> dict:
+    """從 Open-Meteo 抓取目前的氣象資訊"""
     url = f"{config.OPEN_METEO_BASE_URL}/forecast"
     params = {
         "latitude": lat,
@@ -58,7 +56,7 @@ async def fetch_weather(city: str, lat: float, lon: float) -> dict:
     }
 
 async def fetch_air_quality(city: str, lat: float, lon: float) -> dict:
-    # Open-Meteo Air Quality API
+    """抓取目前的空氣品質資訊 (AQI, PM2.5, PM10)"""
     url = "https://air-quality-api.open-meteo.com/v1/air-quality"
     params = {
         "latitude": lat,
@@ -83,11 +81,11 @@ async def fetch_air_quality(city: str, lat: float, lon: float) -> dict:
     }
 
 async def fetch_earthquakes(lat: float, lon: float, radius_km: int = 500) -> list[dict]:
-    """Fetch recent earthquakes globally from USGS."""
+    """從 USGS 抓取全球即時地震資訊"""
     url = "https://earthquake.usgs.gov/fdsnws/event/1/query"
     
-    # Calculate crude bounding box for USGS
-    lat_diff = radius_km / 111.0 # 1 deg ~ 111km
+    # 計算經緯度範圍
+    lat_diff = radius_km / 111.0
     lon_diff = radius_km / 111.0
     
     params = {
@@ -97,7 +95,7 @@ async def fetch_earthquakes(lat: float, lon: float, radius_km: int = 500) -> lis
         "minlongitude": lon - lon_diff,
         "maxlongitude": lon + lon_diff,
         "starttime": (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d"),
-        "minmagnitude": 3.0 # Only moderate+ earthquakes
+        "minmagnitude": 3.0 # 只抓取規模 3.0 以上的地震
     }
 
     async with httpx.AsyncClient(timeout=10) as client:
@@ -106,11 +104,10 @@ async def fetch_earthquakes(lat: float, lon: float, radius_km: int = 500) -> lis
         data = resp.json()
 
     events = []
-    for feature in data.get("features", [])[:5]: # Top 5 recent ones
+    for feature in data.get("features", [])[:5]:
         props = feature["properties"]
         coords = feature["geometry"]["coordinates"]
         
-        # Convert timestamp (ms) to string
         time_str = datetime.fromtimestamp(props["time"]/1000.0).strftime("%Y-%m-%d %H:%M")
         
         events.append({
@@ -124,7 +121,7 @@ async def fetch_earthquakes(lat: float, lon: float, radius_km: int = 500) -> lis
 
 
 def _weather_code_to_desc(code: int) -> str:
-    """Convert WMO weather code to human-readable description."""
+    """將 WMO 天氣代碼轉換為中文描述"""
     mapping = {
         0: "晴天", 1: "大致晴朗", 2: "局部多雲", 3: "多雲",
         45: "霧", 48: "霧凇",
@@ -137,15 +134,11 @@ def _weather_code_to_desc(code: int) -> str:
     return mapping.get(code, f"天氣代碼 {code}")
 
 
-# ---------------------------------------------------------------------------
-# OpenStreetMap POI data
-# ---------------------------------------------------------------------------
-
 async def fetch_nearby_pois(lat: float, lon: float, city: str, radius_m: int = 1500) -> list[dict]:
-    """Fetch real nearby POIs (cafes, restaurants, tourism) using OpenStreetMap Overpass API."""
+    """利用 Overpass API 抓取鄰近的真實地點 (餐廳、咖啡廳、景點)"""
     url = "https://overpass-api.de/api/interpreter"
     
-    # Overpass QL query: find cafes, restaurants, fast_food, and tourism spots
+    # Overpass 查詢語法
     query = f"""
     [out:json][timeout:10];
     (
@@ -172,7 +165,7 @@ async def fetch_nearby_pois(lat: float, lon: float, city: str, radius_m: int = 1
         category = amenity if amenity else tourism
         if not category: category = "景點"
         
-        # Calculate rough distance
+        # 計算距離 (公尺)
         dist = _haversine_distance(lat, lon, el.get("lat", lat), el.get("lon", lon))
         
         results.append({
@@ -185,12 +178,13 @@ async def fetch_nearby_pois(lat: float, lon: float, city: str, radius_m: int = 1
             "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
         })
         
-    # Sort by distance and return top 30
+    # 按距離排序並取前 30 名
     results.sort(key=lambda x: x["distance_m"])
     return results[:30]
 
 def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    R = 6371000 # Earth radius in meters
+    """計算兩個經緯度之間的距離"""
+    R = 6371000 # 地球半徑 (公尺)
     phi1 = math.radians(lat1)
     phi2 = math.radians(lat2)
     delta_phi = math.radians(lat2 - lat1)
@@ -201,6 +195,7 @@ def _haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> f
 
 
 def generate_historical_data(city: str, days: int = 7) -> list[dict]:
+    """生成歷史模擬數據 (用於測試)"""
     all_data = []
     base_date = datetime.now()
 
@@ -209,7 +204,7 @@ def generate_historical_data(city: str, days: int = 7) -> list[dict]:
         temp = random.uniform(12, 32)
         is_rain = random.choice([True, False, False])
 
-        mock_weather = {"rain": is_rain, "temperature": temp}
+        # 模擬天氣文檔
         weather_doc = {
             "city": city, "temperature": round(temp, 1), "humidity": round(random.uniform(50, 95), 1),
             "rain": is_rain, "rain_mm": round(random.uniform(0, 30), 1) if is_rain else 0,
@@ -219,7 +214,7 @@ def generate_historical_data(city: str, days: int = 7) -> list[dict]:
         }
         all_data.append({"type": "weather", "data": weather_doc})
         
-        # Fake AQI
+        # 模擬空氣品質文檔
         aqi_doc = {
             "city": city, "aqi_us": int(random.uniform(20, 150)),
             "pm2_5": round(random.uniform(5, 55), 1), "pm10": round(random.uniform(10, 80), 1),
@@ -227,7 +222,7 @@ def generate_historical_data(city: str, days: int = 7) -> list[dict]:
         }
         all_data.append({"type": "air_quality", "data": aqi_doc})
 
-        # Instead of mock business data, in historical seed we'll just insert one dummy POI
+        # 模擬一個簡單的地點
         poi_doc = {
             "name": f"{city}歷史古蹟",
             "category": "museum",

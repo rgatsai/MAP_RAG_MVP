@@ -1,22 +1,18 @@
-"""
-Configuration for the Intelligence Map RAG API.
-"""
-
-# Ollama settings
+# Ollama 設定
 OLLAMA_MODEL = "qwen2.5:7b"
 OLLAMA_BASE_URL = "http://localhost:11434"
 
-# ChromaDB settings
+# ChromaDB 設定
 CHROMA_PERSIST_DIR = "./chroma_data"
 CHROMA_COLLECTION_NAME = "intel_reports"
 
-# Open-Meteo API (free, no key needed)
+# Open-Meteo API
 OPEN_METEO_BASE_URL = "https://api.open-meteo.com/v1"
 
-# RAG settings
-RAG_TOP_K = 5  # Number of similar documents to retrieve
+# RAG 設定
+RAG_TOP_K = 5
 
-# LLM prompt template
+# LLM 提示詞模板
 ANALYSIS_SYSTEM_PROMPT = """你是一位專業且嚴謹的情報分析師。
 你的任務是根據提供的「原始資料」，直接回答使用者的問題，並產出有價值的情報摘要。
 
